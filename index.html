@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemi ve Depo Giriş Takip Sistemi</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f4f6f9;
+            padding-bottom: 80px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .gemi-kart {
+            background: #ffffff;
+            border-left: 5px solid #0d6efd;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            transition: all 0.2s ease;
+        }
+        .gemi-kart:hover {
+            box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+        }
+        .hata-siniri {
+            background-color: #ffe6e6 !important;
+            border-color: #ff3333 !important;
+            color: #cc0000 !important;
+            font-weight: bold;
+        }
+        .uyari-metni {
+            font-size: 0.85rem;
+            color: #cc0000;
+            margin-top: 4px;
+            display: block;
+            font-weight: 500;
+        }
+        footer {
+            background: #ffffff;
+            border-top: 1px solid #dee2e6;
+            padding: 15px 0;
+            font-size: 0.9rem;
+            color: #6c757d;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        /* --- GECE MODU CSS --- */
+        body.dark-mode {
+            background-color: #121212;
+            color: #e0e0e0;
+        }
+        body.dark-mode .gemi-kart {
+            background-color: #1e1e1e;
+            border-left: 5px solid #0a58ca;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        body.dark-mode footer {
+            background-color: #1e1e1e;
+            border-top: 1px solid #333;
+            color: #aaa;
+        }
+        body.dark-mode h2 {
+            color: #e0e0e0;
+        }
+        body.dark-mode .form-control {
+            background-color: #2c2c2c;
+            color: #e0e0e0;
+            border-color: #444;
+        }
+        body.dark-mode .form-control::placeholder {
+            color: #888;
+        }
+        body.dark-mode .bg-light {
+            background-color: #2c2c2c !important;
+        }
+        body.dark-mode .text-dark {
+            color: #e0e0e0 !important;
+        }
+        body.dark-mode .text-muted {
+            color: #aaa !important;
+        }
+        body.dark-mode .hata-siniri {
+            background-color: #4a0000 !important;
+            color: #ff6b6b !important;
+            border-color: #ff3333 !important;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <h2>Gemi ve Depo Giriş Takip Sistemi</h2>
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+            <!-- Gizli CSV Dosya Yükleme Inputu -->
+            <input type="file" id="csvDosyaSecici" accept=".csv" style="display: none;" onchange="csvDosyaYukle(event)">
+            
+            <button class="btn btn-dark" onclick="document.getElementById('csvDosyaSecici').click()">📂 CSV Yükle</button>
+            <button class="btn btn-warning text-dark" onclick="csvYedekIndir()">📥 CSV Yedek İndir</button>
+            
+            <button class="btn btn-primary" onclick="gemiEkle()">Yeni Gemi Girişi Ekle</button>
+            <button class="btn btn-success" onclick="whatsappAktar()">WhatsApp Giriş Raporu Kopyala</button>
+            <button class="btn btn-secondary" onclick="excelAktar()">Excel Olarak İndir</button>
+            <button class="btn btn-outline-dark" id="temaButonu" onclick="temaDegistir()">🌙 Gece Modu</button>
+        </div>
+    </div>
+
+    <div id="gemiListesi" class="row"></div>
+</div>
+
+<footer class="fixed-bottom text-center">
+    <div class="container">
+        <span>Copyright © 2026 | Gemi ve Depo Giriş Takip Sistemi</span>
+        <br>
+        <span class="small">Geliştirici & Lisans Sahibi: <strong>Deniz GÜRBÜZ</strong> | Tüm Hakları Saklıdır.</span>
+    </div>
+</footer>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    temaYukle();
+    sistemiYukle();
+});
+
+function temaYukle() {
+    if (localStorage.getItem("tema") === "dark") {
+        document.body.classList.add("dark-mode");
+        const btn = document.getElementById("temaButonu");
+        btn.innerHTML = "☀️ Gündüz Modu";
+        btn.classList.replace("btn-outline-dark", "btn-outline-light");
+    }
+}
+
+function temaDegistir() {
+    document.body.classList.toggle("dark-mode");
+    const btn = document.getElementById("temaButonu");
+    
+    if (document.body.classList.contains("dark-mode")) {
+        localStorage.setItem("tema", "dark");
+        btn.innerHTML = "☀️️ Gündüz Modu";
+        btn.classList.replace("btn-outline-dark", "btn-outline-light");
+    } else {
+        localStorage.setItem("tema", "light");
+        btn.innerHTML = "🌙 Gece Modu";
+        btn.classList.replace("btn-outline-light", "btn-outline-dark");
+    }
+}
+
+function sistemiYukle() {
+    const liste = document.getElementById("gemiListesi");
+    liste.innerHTML = "";
+    
+    const hafiza = localStorage.getItem("gemiGirisVerileri");
+    if (hafiza) {
+        const veriler = JSON.parse(hafiza);
+        if(veriler.length > 0) {
+            veriler.forEach(veri => gemiEkle(veri));
+            return;
+        }
+    }
+    gemiEkle();
+}
+
+function veriyiKaydet() {
+    const kartlar = document.querySelectorAll(".gemi-kart");
+    const veriDizisi = [];
+
+    kartlar.forEach(kart => {
+        veriDizisi.push({
+            id: kart.dataset.id,
+            gemiAdi: kart.querySelector(".gemi-adi").value,
+            urunAdi: kart.querySelector(".urun-adi").value,
+            gelecekMiktar: kart.querySelector(".gelecek-miktar").value,
+            girenMiktar: kart.querySelector(".giren-miktar").value,
+            girenArac: kart.querySelector(".giren-arac").value,
+            depolar: kart.querySelector(".depolar").value
+        });
+    });
+
+    localStorage.setItem("gemiGirisVerileri", JSON.stringify(veriDizisi));
+}
+
+function gemiEkle(veri = {}) {
+    const liste = document.getElementById("gemiListesi");
+    const benzersizId = veri.id || "gemi_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+
+    const kol = document.createElement("div");
+    kol.className = "col-12 mb-4 gemi-kart-kol";
+    kol.id = benzersizId;
+
+    kol.innerHTML = `
+        <div class="card gemi-kart" data-id="${benzersizId}">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                    <div class="d-flex gap-2 flex-grow-1">
+                        <input type="text" class="form-control form-control-lg fw-bold gemi-adi" placeholder="Gemi Adı Giriniz..." value="${veri.gemiAdi || ''}" oninput="veriyiKaydet()">
+                        <input type="text" class="form-control form-control-lg urun-adi" placeholder="Ürün Cinsi..." value="${veri.urunAdi || ''}" oninput="veriyiKaydet()">
+                    </div>
+                    <button class="btn btn-outline-danger btn-sm" onclick="gemiSil('${benzersizId}')">Giriş Kartını Sil</button>
+                </div>
+                
+                <div class="row g-3">
+                    <div class="col-md-3 col-sm-6">
+                        <label class="form-label text-muted small fw-bold">Gelecek Toplam Yük (KG)</label>
+                        <input type="number" class="form-control gelecek-miktar" placeholder="Örn: 4000000" value="${veri.gelecekMiktar || ''}">
+                    </div>
+                    
+                    <div class="col-md-3 col-sm-6">
+                        <label class="form-label text-primary small fw-bold">Depoya Giren (KG)</label>
+                        <input type="number" class="form-control giren-miktar" placeholder="Örn: 150000" value="${veri.girenMiktar || ''}">
+                        <small class="uyari-metni"></small>
+                    </div>
+                    <div class="col-md-2 col-sm-6">
+                        <label class="form-label text-primary small fw-bold">Giren Araç Sayısı</label>
+                        <input type="number" class="form-control giren-arac" placeholder="0" value="${veri.girenArac || ''}">
+                    </div>
+
+                    <div class="col-md-4 col-sm-6">
+                        <label class="form-label text-muted small fw-bold">Girilen Depolar (Virgülle: 1, 2, 3)</label>
+                        <input type="text" class="form-control depolar" placeholder="Örn: 1, A2, 4" value="${veri.depolar || ''}">
+                    </div>
+                </div>
+
+                <div class="row mt-3 pt-3 border-top align-items-center">
+                    <div class="col-md-3">
+                        <div class="p-2 bg-light rounded text-center">
+                            <span class="text-secondary small d-block">Toplam Giren</span>
+                            <strong class="fs-5 text-dark toplam-tahliye">0</strong> <span class="small text-muted">KG</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-2 bg-light rounded text-center">
+                            <span class="text-secondary small d-block">Kalan Net Yük</span>
+                            <strong class="fs-5 text-dark kalan-tonaj">0</strong> <span class="small text-muted">KG</span>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="p-2 bg-light rounded text-center">
+                            <span class="text-secondary small d-block">Tahmini Kalan Araç</span>
+                            <strong class="fs-5 text-dark kalan-arac">0</strong> <span class="small text-muted">Adet</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="depo-dagilim-alani"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    liste.appendChild(kol);
+
+    const kart = kol.querySelector(".gemi-kart");
+    const inputGelecek = kart.querySelector(".gelecek-miktar");
+    const inputGiren = kart.querySelector(".giren-miktar");
+    const inputArac = kart.querySelector(".giren-arac");
+    const inputDepolar = kart.querySelector(".depolar");
+    
+    const spanToplamTahliye = kart.querySelector(".toplam-tahliye");
+    const spanKalan = kart.querySelector(".kalan-tonaj");
+    const spanKalanArac = kart.querySelector(".kalan-arac");
+    const divDepoDagitim = kart.querySelector(".depo-dagilim-alani");
+    const kucukUyari = kart.querySelector(".uyari-metni");
+
+    function hesapla() {
+        const gelecekMiktar = parseFloat(inputGelecek.value) || 0;
+        const girenMiktar = parseFloat(inputGiren.value) || 0;
+        const girenArac = parseInt(inputArac.value) || 0;
+        const depolarStr = inputDepolar.value.trim();
+
+        const toplamTahliye = girenMiktar;
+        spanToplamTahliye.innerText = Math.round(toplamTahliye);
+
+        if (toplamTahliye > gelecekMiktar) {
+            inputGiren.classList.add('hata-siniri');
+            kucukUyari.innerText = "Hata: Toplam giren miktar gelecek yükü aşamaz.";
+            
+            spanKalan.innerText = "0";
+            spanKalanArac.innerText = "0";
+            divDepoDagitim.innerHTML = "<span class='text-danger small'>Hatalı yük girişi.</span>";
+            veriyiKaydet();
+            return; 
+        } else {
+            inputGiren.classList.remove('hata-siniri');
+            kucukUyari.innerText = "";
+        }
+
+        const kalanMiktar = gelecekMiktar - toplamTahliye;
+        spanKalan.innerText = Math.round(kalanMiktar);
+
+        const ortalamaKg = girenArac > 0 ? girenMiktar / girenArac : 0;
+        const tahminiKalanArac = ortalamaKg > 0 ? Math.ceil(kalanMiktar / ortalamaKg) : 0;
+        spanKalanArac.innerText = Math.round(tahminiKalanArac);
+
+        if (depolarStr) {
+            const depoListesi = depolarStr.split(',').map(d => d.trim()).filter(d => d !== "");
+            if (depoListesi.length > 0) {
+                const depoBasinaMiktar = girenMiktar / depoListesi.length;
+                const depoBasinaArac = girenArac / depoListesi.length;
+                const ortalamaTonaj = depoBasinaArac > 0 ? (depoBasinaMiktar / depoBasinaArac) : 0;
+
+                let depoHtml = '<div class="small text-muted mb-1 fw-bold">Depo Giriş Dağılımları:</div>';
+                depoListesi.forEach(depo => {
+                    depoHtml += `<div class="badge bg-secondary me-1 mb-1 p-2 text-start font-monospace" style="display:inline-block; min-width:110px; vertical-align: top;">
+                        Depo ${depo}:<br>${Math.round(depoBasinaMiktar)} KG / ${Math.round(depoBasinaArac)} Araç
+                    </div>`;
+                });
+                
+                depoHtml += `<div class="badge bg-secondary me-1 mb-1 p-2 text-start font-monospace" style="display:inline-block; min-width:110px; vertical-align: top;">
+                    Ort. Tonaj:<br>${Math.round(ortalamaTonaj)} KG/Araç
+                </div>`;
+                
+                divDepoDagitim.innerHTML = depoHtml;
+            } else {
+                divDepoDagitim.innerHTML = "";
+            }
+        } else {
+            divDepoDagitim.innerHTML = "";
+        }
+
+        veriyiKaydet();
+    }
+
+    inputGelecek.addEventListener("input", hesapla);
+    inputGiren.addEventListener("input", hesapla);
+    inputArac.addEventListener("input", hesapla);
+    inputDepolar.addEventListener("input", hesapla);
+
+    hesapla();
+}
+
+function gemiSil(id) {
+    if (confirm("Bu gemi giriş kartını silmek istediğinize emin misiniz?")) {
+        const element = document.getElementById(id);
+        if (element) {
+            element.remove();
+            veriyiKaydet();
+        }
+    }
+}
+
+function whatsappAktar() {
+    const kartlar = document.querySelectorAll(".gemi-kart");
+    if (kartlar.length === 0) return alert("Raporlanacak giriş verisi bulunamadı.");
+
+    let metin = "";
+    kartlar.forEach((kart) => {
+        const gemiAdi = (kart.querySelector(".gemi-adi").value || "Bilinmiyor").toUpperCase();
+        const urunAdi = (kart.querySelector(".urun-adi").value || "Bilinmiyor").toUpperCase();
+        const gelecek = parseFloat(kart.querySelector(".gelecek-miktar").value) || 0;
+        const giren = parseFloat(kart.querySelector(".giren-miktar").value) || 0;
+        const arac = parseInt(kart.querySelector(".giren-arac").value) || 0;
+        const depolarStr = kart.querySelector(".depolar").value;
+
+        const kalanNet = Math.max(0, gelecek - giren);
+        const ortalamaKg = arac > 0 ? giren / arac : 0;
+        const gerekenArac = ortalamaKg > 0 ? Math.ceil(kalanNet / ortalamaKg) : 0;
+
+        metin += `*GEMİ ADI:* ${gemiAdi}\n`;
+        metin += `*ÜRÜN ADI:* ${urunAdi}\n`;
+        metin += `*GELECEK TOPLAM:* ${Math.round(gelecek)} KG\n`;
+        metin += `*GİRİŞ YAPILAN DEPO:* ${depolarStr || 'Belirtilmemiş'}\n`;
+        metin += `*GİREN ARAÇ SAYISI:* ${Math.round(arac)}\n`;
+        metin += `*TOPLAM GİREN YÜK:* ${Math.round(giren)} KG\n`;
+        metin += `*KALAN NET YÜK:* ${Math.round(kalanNet)} KG\n`;
+        metin += `*TAHMİNİ GEREKEN ARAÇ:* ${Math.round(gerekenArac)}\n\n`;
+    });
+
+    const area = document.createElement("textarea");
+    area.value = metin;
+    area.style.position = "fixed";
+    area.style.left = "-9999px";
+    document.body.appendChild(area);
+    area.focus();
+    area.select();
+    try {
+        document.execCommand('copy');
+        alert("Giriş raporu panoya kopyalandı!");
+    } catch (err) {
+        alert("Kopyalama başarısız oldu.");
+    }
+    document.body.removeChild(area);
+}
+
+function excelAktar() {
+    const kartlar = document.querySelectorAll(".gemi-kart");
+    if (kartlar.length === 0) return alert("Dışa aktarılacak veri yok.");
+
+    let excelHtml = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head><meta charset="utf-8"></head>
+    <body>
+        <table border="1">
+            <tr>
+                <th>Gemi Adı</th><th>Ürün Cinsi</th><th>Gelecek Miktar (KG)</th><th>Giren Miktar (KG)</th>
+                <th>Giren Araç</th><th>Kalan Net Yük (KG)</th><th>Depolar</th>
+            </tr>`;
+
+    kartlar.forEach(kart => {
+        const gelecek = parseFloat(kart.querySelector(".gelecek-miktar").value) || 0;
+        const giren = parseFloat(kart.querySelector(".giren-miktar").value) || 0;
+        excelHtml += `
+            <tr>
+                <td>${kart.querySelector(".gemi-adi").value}</td>
+                <td>${kart.querySelector(".urun-adi").value}</td>
+                <td>${Math.round(gelecek)}</td>
+                <td>${Math.round(giren)}</td>
+                <td>${Math.round(kart.querySelector(".giren-arac").value)}</td>
+                <td>${Math.round(Math.max(0, gelecek - giren))}</td>
+                <td>${kart.querySelector(".depolar").value}</td>
+            </tr>`;
+    });
+
+    excelHtml += `</table></body></html>`;
+    const blob = new Blob([excelHtml], { type: "application/vnd.ms-excel" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "Gemi-Giris-Raporu.xls";
+    link.click();
+}
+
+function csvYedekIndir() {
+    const kartlar = document.querySelectorAll(".gemi-kart");
+    if (kartlar.length === 0) return alert("İndirilecek veri yok.");
+
+    let csvIcerik = "\uFEFFGemi Adi,Urun Adi,Gelecek Miktar,Giren Miktar,Giren Arac,Depolar\n";
+
+    kartlar.forEach(kart => {
+        const gemiAdi = `"${(kart.querySelector(".gemi-adi").value || "").replace(/"/g, '""')}"`;
+        const urunAdi = `"${(kart.querySelector(".urun-adi").value || "").replace(/"/g, '""')}"`;
+        const gelecekMiktar = kart.querySelector(".gelecek-miktar").value || 0;
+        const girenMiktar = kart.querySelector(".giren-miktar").value || 0;
+        const girenArac = kart.querySelector(".giren-arac").value || 0;
+        const depolar = `"${(kart.querySelector(".depolar").value || "").replace(/"/g, '""')}"`;
+
+        csvIcerik += `${gemiAdi},${urunAdi},${gelecekMiktar},${girenMiktar},${girenArac},${depolar}\n`;
+    });
+
+    const simdikiTarih = new Date();
+    const gun = String(simdikiTarih.getDate()).padStart(2, '0');
+    const ay = String(simdikiTarih.getMonth() + 1).padStart(2, '0');
+    const yil = simdikiTarih.getFullYear();
+    const tarihStr = `${gun}.${ay}.${yil}`;
+
+    const dosyaAdi = `Gemi ve Depo Giriş Takip - ${tarihStr}.csv`;
+
+    const blob = new Blob([csvIcerik], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = dosyaAdi;
+    link.click();
+}
+
+function csvDosyaYukle(event) {
+    const dosya = event.target.files[0];
+    if (!dosya) return;
+
+    const okuyucu = new FileReader();
+    okuyucu.onload = function(e) {
+        const metin = e.target.result;
+        const satirlar = metin.split("\n");
+        const yeniVeriler = [];
+
+        for (let i = 1; i < satirlar.length; i++) {
+            const satir = satirlar[i].trim();
+            if (!satir) continue;
+
+            const sutunlar = [];
+            let icindeMi = false;
+            let gecici = "";
+            for (let j = 0; j < satir.length; j++) {
+                const karakter = satir[j];
+                if (karakter === '"') {
+                    icindeMi = !icindeMi;
+                } else if (karakter === ',' && !icindeMi) {
+                    sutunlar.push(gecici.replace(/^"|"$/g, "").replace(/""/g, '"'));
+                    gecici = "";
+                } else {
+                    gecici += karakter;
+                }
+            }
+            sutunlar.push(gecici.replace(/^"|"$/g, "").replace(/""/g, '"'));
+
+            if (sutunlar.length >= 6) {
+                yeniVeriler.push({
+                    id: "gemi_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                    gemiAdi: sutunlar[0],
+                    urunAdi: sutunlar[1],
+                    gelecekMiktar: sutunlar[2],
+                    girenMiktar: sutunlar[3],
+                    girenArac: sutunlar[4],
+                    depolar: sutunlar[5]
+                });
+            }
+        }
+
+        if (yeniVeriler.length > 0) {
+            localStorage.setItem("gemiGirisVerileri", JSON.stringify(yeniVeriler));
+            sistemiYukle();
+            alert("CSV giriş yedeği başarıyla yüklendi!");
+        } else {
+            alert("Dosya içeriği uygun formatta değil veya boş.");
+        }
+        
+        event.target.value = "";
+    };
+    okuyucu.readAsText(dosya, "UTF-8");
+}
+</script>
+
+</body>
+</html>
